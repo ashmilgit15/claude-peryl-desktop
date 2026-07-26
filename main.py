@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 from system_prompt import get_system_prompt, CLAUDE_PERYL_SYSTEM_PROMPT
 from agent_engine import AgentEngine
 
-# Load environment variables securely from .env
 load_dotenv()
 
 HACKCLUB_URL = os.getenv("HACKCLUB_URL", "https://ai.hackclub.com/proxy/v1/chat/completions")
@@ -27,7 +26,6 @@ api = FastAPI(title="Claude Peryl Desktop Engine")
 agent_engine = AgentEngine(api_key=HACKCLUB_KEY, endpoint=HACKCLUB_URL, tavily_key=TAVILY_API_KEY)
 active_system_prompt = CLAUDE_PERYL_SYSTEM_PROMPT
 
-# Mount static files directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
@@ -61,15 +59,26 @@ async def update_system_prompt(request: Request):
         active_system_prompt = data["system_prompt"]
     return {"status": "ok", "system_prompt": active_system_prompt}
 
-def convert_anthropic_to_openai(body: dict) -> dict:
+async def convert_anthropic_to_openai(body: dict, web_context: str = "") -> dict:
     messages = []
-    system_text = active_system_prompt
+    
+    identity_preamble = (
+        "IDENTITY & CAPABILITIES:\n"
+        "You are Claude Peryl 5, created by ashmil P.\n"
+        "You ARE fully equipped with real-time web search (via Tavily Search API), code execution sandbox, subagents, and interactive artifact rendering capabilities in this environment.\n"
+    )
+
+    system_text = identity_preamble + "\n\n" + active_system_prompt
+
+    if web_context:
+        system_text += f"\n\nLIVE TAVILY WEB SEARCH RESULTS FOR USER QUERY:\n{web_context}\n\nInstructions: Use the above live web search results directly in your response to answer accurately with web citations!"
+
     if "system" in body:
         user_sys = body["system"]
         if isinstance(user_sys, list):
             user_sys = "\n".join([b.get("text", "") for b in user_sys if b.get("type") == "text"])
         if user_sys:
-            system_text = system_text + "\n\nUser Custom Context:\n" + user_sys
+            system_text = system_text + "\n\nUser Context:\n" + user_sys
 
     messages.append({"role": "system", "content": system_text})
 
@@ -104,6 +113,8 @@ async def stream_openai_to_anthropic(openai_payload: dict, headers: dict):
             yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})}\n\n"
 
             async for line in response.aiter_lines():
+                if not line:
+                    continue
                 if line.startswith("data: "):
                     data_str = line[6:].strip()
                     if data_str == "[DONE]":
@@ -148,18 +159,29 @@ async def stream_deep_research(topic: str):
 async def handle_anthropic_messages(request: Request):
     body = await request.json()
     is_deep_research = body.get("deep_research", False) or body.get("model") == "claude-peryl-deep-research"
+    enable_web_search = body.get("enable_web_search", False)
+
+    messages = body.get("messages", [])
+    last_user_prompt = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            c = m.get("content")
+            last_user_prompt = c if isinstance(c, str) else str(c)
+            break
 
     if is_deep_research:
-        messages = body.get("messages", [])
-        last_topic = messages[-1]["content"] if messages else "General Research"
         return StreamingResponse(
-            stream_deep_research(last_topic),
+            stream_deep_research(last_user_prompt or "General Research"),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
         )
 
+    web_context = ""
+    if enable_web_search and last_user_prompt:
+        web_context = await agent_engine.get_formatted_web_context(last_user_prompt)
+
     is_stream = body.get("stream", False)
-    openai_payload = convert_anthropic_to_openai(body)
+    openai_payload = await convert_anthropic_to_openai(body, web_context=web_context)
     
     clean_headers = {
         "Authorization": f"Bearer {HACKCLUB_KEY}",
@@ -172,7 +194,7 @@ async def handle_anthropic_messages(request: Request):
         return StreamingResponse(
             stream_openai_to_anthropic(openai_payload, clean_headers),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
         )
     else:
         async with httpx.AsyncClient(timeout=120.0) as client:

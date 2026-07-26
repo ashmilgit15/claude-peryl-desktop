@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const threadTitle = document.getElementById('current-thread-title');
     const activeModeBadge = document.getElementById('active-mode-badge');
     const deepResearchToggle = document.getElementById('btn-toggle-deep-research');
+    const webSearchToggle = document.getElementById('btn-toggle-web-search');
     const subagentStatusBar = document.getElementById('subagent-status-bar');
     const subagentStatusText = document.getElementById('subagent-status-text');
 
@@ -35,10 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // State Variables
     let conversationHistory = [];
     let isDeepResearch = false;
+    let isWebSearchEnabled = true;
     let artifactsMap = new Map();
     let activeArtifactId = null;
 
-    // Window storage implementation script to inject into HTML artifacts
     const WINDOW_STORAGE_SCRIPT = `
         <script>
             (function() {
@@ -64,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
         </script>
     `;
 
-    // Fetch system prompt on load
     fetch('/api/system_prompt')
         .then(r => r.json())
         .then(data => {
@@ -72,10 +72,18 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(() => {});
 
-    // Auto-resize textarea
     promptInput.addEventListener('input', () => {
         promptInput.style.height = 'auto';
         promptInput.style.height = Math.min(promptInput.scrollHeight, 150) + 'px';
+    });
+
+    // Web Search Selector Toggle
+    webSearchToggle.addEventListener('click', () => {
+        isWebSearchEnabled = !isWebSearchEnabled;
+        webSearchToggle.classList.toggle('active', isWebSearchEnabled);
+        webSearchToggle.innerHTML = isWebSearchEnabled 
+            ? '<i class="fa-solid fa-globe"></i> Web Search ON' 
+            : '<i class="fa-solid fa-globe" style="opacity:0.5;"></i> Web Search OFF';
     });
 
     // Deep Research Toggle
@@ -83,11 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isDeepResearch = !isDeepResearch;
         deepResearchToggle.classList.toggle('active', isDeepResearch);
         activeModeBadge.innerText = isDeepResearch ? 'Deep Dive Research' : 'Standard Chat';
-        if (isDeepResearch) {
-            modelSelect.value = 'claude-peryl-deep-research';
-        } else {
-            modelSelect.value = 'claude-peryl';
-        }
+        modelSelect.value = isDeepResearch ? 'claude-peryl-deep-research' : 'claude-peryl';
     });
 
     // Mode Selector Buttons
@@ -103,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Suggestion Cards
     document.querySelectorAll('.suggestion-card').forEach(card => {
         card.addEventListener('click', () => {
             promptInput.value = card.dataset.prompt;
@@ -111,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // New Chat Button
     newChatBtn.addEventListener('click', () => {
         conversationHistory = [];
         artifactsMap.clear();
@@ -123,7 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
         threadTitle.innerText = 'New Conversation';
     });
 
-    // Send Message Handler
     async function sendMessage() {
         const text = promptInput.value.trim();
         if (!text) return;
@@ -132,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
             welcomeScreen.style.display = 'none';
         }
 
-        // Set thread title if first message
         if (conversationHistory.length === 0) {
             threadTitle.innerText = text.length > 28 ? text.slice(0, 28) + '...' : text;
         }
@@ -148,7 +148,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isDeepResearch) {
             subagentStatusBar.style.display = 'flex';
-            subagentStatusText.innerText = 'Initializing Deep Dive Research Subagents...';
+            subagentStatusText.innerText = 'Initializing Deep Dive Research Subagents with Tavily...';
+        } else if (isWebSearchEnabled) {
+            subagentStatusBar.style.display = 'flex';
+            subagentStatusText.innerText = 'Searching web via Tavily API...';
         }
 
         try {
@@ -159,37 +162,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     model: modelSelect.value,
                     messages: conversationHistory,
                     stream: true,
-                    deep_research: isDeepResearch
+                    deep_research: isDeepResearch,
+                    enable_web_search: isWebSearchEnabled
                 })
             });
+
+            subagentStatusBar.style.display = 'none';
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let fullAssistantText = '';
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const rawData = line.slice(6).strip ? line.slice(6).strip() : line.slice(6).trim();
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed.startsWith(':')) continue;
+
+                    if (trimmed.startsWith('data: ')) {
+                        const rawData = trimmed.slice(6).trim();
                         if (rawData === '[DONE]') break;
 
                         try {
                             const data = JSON.parse(rawData);
 
-                            // Subagent Step Events
                             if (data.type === 'subagent_step' || data.type === 'subagent_start') {
                                 subagentProgressBox.style.display = 'flex';
                                 subagentProgressBox.innerHTML = `
                                     <i class="fa-solid fa-microchip"></i>
                                     <span><strong>[${data.role || 'Subagent'}]</strong> ${data.message}</span>
                                 `;
-                                subagentStatusText.innerText = data.message;
                             } else if (data.type === 'subagent_complete') {
                                 subagentProgressBox.innerHTML += `
                                     <div style="font-size: 11px; opacity: 0.8; margin-top: 4px;">✓ ${data.role} complete.</div>
@@ -204,10 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            subagentStatusBar.style.display = 'none';
             conversationHistory.push({ role: 'assistant', content: fullAssistantText });
-
-            // Check for Artifacts in output
             checkForArtifacts(fullAssistantText, contentDiv);
 
         } catch (err) {
@@ -249,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderMarkdown(element, markdownText) {
         if (typeof marked !== 'undefined') {
             element.innerHTML = marked.parse(markdownText);
-            // Highlight code blocks
             element.querySelectorAll('pre code').forEach((block) => {
                 if (typeof hljs !== 'undefined') hljs.highlightElement(block);
             });
@@ -278,7 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             artifactsMap.set(artId, artifactObj);
 
-            // Append Artifact Banner to message
             const banner = document.createElement('div');
             banner.className = 'artifact-card-banner';
             banner.innerHTML = `
@@ -291,7 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
             banner.addEventListener('click', () => openArtifact(artId));
             parentElement.appendChild(banner);
 
-            // Auto-open first artifact
             openArtifact(artId);
         }
 
@@ -314,12 +317,10 @@ document.addEventListener('DOMContentLoaded', () => {
         artifactActiveTitle.innerText = artifact.title;
         artifactsPanel.classList.remove('collapsed');
 
-        // Set Code View
         artifactCodeBlock.className = `language-${artifact.type}`;
         artifactCodeBlock.textContent = artifact.content;
         if (typeof hljs !== 'undefined') hljs.highlightElement(artifactCodeBlock);
 
-        // Render in IFrame Preview
         let docContent = artifact.content;
         if (artifact.type === 'html' || artifact.type === 'svg') {
             if (!docContent.includes('<html')) {
@@ -335,7 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
         artifactIframe.src = URL.createObjectURL(blob);
     }
 
-    // Artifact Tab Switching
     tabPreviewBtn.addEventListener('click', () => {
         tabPreviewBtn.classList.add('active');
         tabCodeBtn.classList.remove('active');
@@ -366,7 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Settings Modal
     settingsBtn.addEventListener('click', () => settingsModal.style.display = 'flex');
     closeModalBtn.addEventListener('click', () => settingsModal.style.display = 'none');
     saveSettingsBtn.addEventListener('click', () => {
@@ -379,7 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsModal.style.display = 'none';
     });
 
-    // Keyboard Shortcuts
     sendBtn.addEventListener('click', sendMessage);
     promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {

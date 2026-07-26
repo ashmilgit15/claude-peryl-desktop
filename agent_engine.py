@@ -8,7 +8,6 @@ import httpx
 from typing import AsyncGenerator, Dict, List, Any, Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env
 load_dotenv()
 
 HACKCLUB_URL = os.getenv("HACKCLUB_URL", "https://ai.hackclub.com/proxy/v1/chat/completions")
@@ -44,7 +43,6 @@ class AgentEngine:
                 if resp.status_code == 200:
                     data = resp.json()
                     results = []
-                    # Include Tavily synthesized answer if present
                     if data.get("answer"):
                         results.append({
                             "title": "Tavily AI Synthesized Summary",
@@ -59,7 +57,7 @@ class AgentEngine:
                         })
                     if results:
                         return results
-        except Exception as e:
+        except Exception:
             pass
 
         return await self.execute_fallback_search(query)
@@ -93,6 +91,24 @@ class AgentEngine:
                 "url": f"https://search.claude-peryl.internal/?q={query}"
             }]
         return results
+
+    async def get_formatted_web_context(self, query: str) -> str:
+        """Perform search and format structured XML context for prompt injection."""
+        results = await self.execute_tavily_search(query)
+        if not results:
+            return ""
+        
+        formatted = ["<web_search_results>"]
+        for idx, item in enumerate(results, 1):
+            formatted.append(
+                f'<doc index="{idx}">\n'
+                f'  <title>{item.get("title")}</title>\n'
+                f'  <url>{item.get("url")}</url>\n'
+                f'  <snippet>{item.get("snippet")}</snippet>\n'
+                f'</doc>'
+            )
+        formatted.append("</web_search_results>")
+        return "\n".join(formatted)
 
     async def execute_python_sandbox(self, code: str) -> Dict[str, str]:
         """Execute Python code in a safe subprocess execution context."""
@@ -129,14 +145,14 @@ class AgentEngine:
                     data = res.json()
                     content = data["choices"][0]["message"].get("content", "")
                     return {"role": role, "status": "completed", "output": content}
-        except Exception as e:
+        except Exception:
             pass
         return {"role": role, "status": "error", "output": f"Subagent {role} failed to respond."}
 
     async def deep_research_stream(self, topic: str) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream progress of Deep Dive Research Agent and Subagents using Tavily."""
         yield {"type": "subagent_start", "role": "Research Orchestrator", "message": f"Deconstructing deep research topic with Tavily Search API: '{topic}'..."}
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.3)
 
         research_angles = [
             f"Overview, recent news, and current status of {topic}",
@@ -152,7 +168,6 @@ class AgentEngine:
                 "message": f"Querying Tavily Search API for: '{angle}'..."
             }
             
-            # Execute Tavily Search
             search_results = await self.execute_tavily_search(angle)
             yield {
                 "type": "subagent_step",
@@ -172,7 +187,6 @@ class AgentEngine:
                 "output": sub_res["output"]
             }
 
-        # Final synthesis
         yield {
             "type": "subagent_step",
             "role": "Synthesis Agent",
