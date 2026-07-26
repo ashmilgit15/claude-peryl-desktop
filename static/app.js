@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggleBtn = document.getElementById('btn-sidebar-toggle');
     const chatContainer = document.getElementById('messages-container');
     const welcomeScreen = document.getElementById('welcome-screen');
     const promptInput = document.getElementById('prompt-input');
@@ -14,8 +16,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const subagentStatusBar = document.getElementById('subagent-status-bar');
     const subagentStatusText = document.getElementById('subagent-status-text');
 
-    // Artifact DOM
+    // Attachment DOM
+    const attachFileBtn = document.getElementById('btn-attach-file');
+    const fileInput = document.getElementById('file-input');
+    const attachmentPreview = document.getElementById('attachment-preview');
+
+    // Thread Search & History DOM
+    const searchThreadsInput = document.getElementById('search-threads-input');
+    const threadsList = document.getElementById('chat-threads-list');
+
+    // Artifact DOM & Resizer
     const artifactsPanel = document.getElementById('artifacts-panel');
+    const artifactsResizer = document.getElementById('artifacts-resizer');
     const toggleArtifactsBtn = document.getElementById('btn-toggle-artifacts');
     const artifactCountSpan = document.getElementById('artifact-count');
     const artifactActiveTitle = document.getElementById('artifact-active-title');
@@ -37,8 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let conversationHistory = [];
     let isDeepResearch = false;
     let isWebSearchEnabled = true;
+    let attachedFiles = [];
     let artifactsMap = new Map();
     let activeArtifactId = null;
+    let savedThreads = JSON.parse(localStorage.getItem('claude_peryl_threads') || '[]');
 
     const WINDOW_STORAGE_SCRIPT = `
         <script>
@@ -65,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </script>
     `;
 
+    // Fetch system prompt on load
     fetch('/api/system_prompt')
         .then(r => r.json())
         .then(data => {
@@ -72,10 +87,60 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(() => {});
 
+    renderThreadsList();
+
+    // Sidebar Toggle
+    sidebarToggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+    });
+
+    // Auto-resize textarea
     promptInput.addEventListener('input', () => {
         promptInput.style.height = 'auto';
         promptInput.style.height = Math.min(promptInput.scrollHeight, 150) + 'px';
     });
+
+    // File Attachment Handler
+    attachFileBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                attachedFiles.push({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    content: evt.target.result
+                });
+                renderAttachmentChips();
+            };
+            if (file.type.startsWith('image/')) {
+                reader.readAsDataURL(file);
+            } else {
+                reader.readAsText(file);
+            }
+        });
+        fileInput.value = '';
+    });
+
+    function renderAttachmentChips() {
+        attachmentPreview.innerHTML = '';
+        attachedFiles.forEach((f, idx) => {
+            const chip = document.createElement('div');
+            chip.className = 'attachment-chip';
+            chip.innerHTML = `
+                <i class="fa-solid fa-file-code"></i>
+                <span>${escapeHtml(f.name)}</span>
+                <i class="fa-solid fa-xmark" style="cursor:pointer;" data-idx="${idx}"></i>
+            `;
+            chip.querySelector('.fa-xmark').addEventListener('click', () => {
+                attachedFiles.splice(idx, 1);
+                renderAttachmentChips();
+            });
+            attachmentPreview.appendChild(chip);
+        });
+    }
 
     // Web Search Selector Toggle
     webSearchToggle.addEventListener('click', () => {
@@ -114,23 +179,102 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // New Chat Button
     newChatBtn.addEventListener('click', () => {
+        saveCurrentThread();
         conversationHistory = [];
+        attachedFiles = [];
         artifactsMap.clear();
+        renderAttachmentChips();
         chatContainer.innerHTML = '';
         welcomeScreen.style.display = 'flex';
         chatContainer.appendChild(welcomeScreen);
         artifactsPanel.classList.add('collapsed');
+        artifactsResizer.style.display = 'none';
         toggleArtifactsBtn.style.display = 'none';
         threadTitle.innerText = 'New Conversation';
     });
 
+    // Search Threads Input
+    searchThreadsInput.addEventListener('input', (e) => {
+        renderThreadsList(e.target.value.toLowerCase().trim());
+    });
+
+    function renderThreadsList(filterText = '') {
+        threadsList.innerHTML = '';
+        savedThreads.filter(t => t.title.toLowerCase().includes(filterText)).forEach((thread, idx) => {
+            const li = document.createElement('li');
+            li.className = 'thread-item';
+            li.innerHTML = `
+                <div style="display:flex;align-items:center;gap:6px;overflow:hidden;">
+                    <i class="fa-regular fa-message" style="font-size:11px;"></i>
+                    <span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(thread.title)}</span>
+                </div>
+                <div class="thread-actions">
+                    <button class="thread-action-btn delete-thread" data-idx="${idx}" title="Delete chat"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+            li.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-thread')) {
+                    savedThreads.splice(idx, 1);
+                    localStorage.setItem('claude_peryl_threads', JSON.stringify(savedThreads));
+                    renderThreadsList();
+                    return;
+                }
+                loadThread(thread);
+            });
+            threadsList.appendChild(li);
+        });
+    }
+
+    function saveCurrentThread() {
+        if (conversationHistory.length > 0) {
+            const title = threadTitle.innerText;
+            const existingIdx = savedThreads.findIndex(t => t.title === title);
+            const threadObj = { title, history: conversationHistory };
+            if (existingIdx >= 0) {
+                savedThreads[existingIdx] = threadObj;
+            } else {
+                savedThreads.unshift(threadObj);
+            }
+            localStorage.setItem('claude_peryl_threads', JSON.stringify(savedThreads));
+            renderThreadsList();
+        }
+    }
+
+    function loadThread(thread) {
+        conversationHistory = thread.history || [];
+        threadTitle.innerText = thread.title;
+        welcomeScreen.style.display = 'none';
+        chatContainer.innerHTML = '';
+
+        conversationHistory.forEach(msg => {
+            if (msg.role === 'user') {
+                appendUserMessage(msg.content);
+            } else {
+                const assistantMessageObj = appendAssistantMessage();
+                renderMarkdown(assistantMessageObj.contentDiv, msg.content);
+                checkForArtifacts(msg.content, assistantMessageObj.contentDiv);
+            }
+        });
+    }
+
     async function sendMessage() {
-        const text = promptInput.value.trim();
-        if (!text) return;
+        let text = promptInput.value.trim();
+        if (!text && attachedFiles.length === 0) return;
 
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
+        }
+
+        // Attach text files content to prompt
+        if (attachedFiles.length > 0) {
+            let fileAttachmentText = '\n\n<attached_files>\n';
+            attachedFiles.forEach(f => {
+                fileAttachmentText += `<file name="${f.name}">\n${f.content}\n</file>\n`;
+            });
+            fileAttachmentText += '</attached_files>';
+            text = text + fileAttachmentText;
         }
 
         if (conversationHistory.length === 0) {
@@ -139,8 +283,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         appendUserMessage(text);
         conversationHistory.push({ role: 'user', content: text });
+
         promptInput.value = '';
         promptInput.style.height = 'auto';
+        attachedFiles = [];
+        renderAttachmentChips();
 
         const assistantMessageObj = appendAssistantMessage();
         const contentDiv = assistantMessageObj.contentDiv;
@@ -214,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             conversationHistory.push({ role: 'assistant', content: fullAssistantText });
+            saveCurrentThread();
             checkForArtifacts(fullAssistantText, contentDiv);
 
         } catch (err) {
@@ -238,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
         wrapper.className = 'message-wrapper assistant';
         wrapper.innerHTML = `
             <div class="avatar assistant"><i class="fa-solid fa-sparkles"></i></div>
-            <div style="flex: 1; max-width: 80%;">
+            <div style="flex: 1; max-width: 85%;">
                 <div class="subagent-card" style="display: none;"></div>
                 <div class="message-bubble assistant-text"></div>
             </div>
@@ -316,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activeArtifactId = artId;
         artifactActiveTitle.innerText = artifact.title;
         artifactsPanel.classList.remove('collapsed');
+        artifactsResizer.style.display = 'block';
 
         artifactCodeBlock.className = `language-${artifact.type}`;
         artifactCodeBlock.textContent = artifact.content;
@@ -336,6 +485,30 @@ document.addEventListener('DOMContentLoaded', () => {
         artifactIframe.src = URL.createObjectURL(blob);
     }
 
+    // Drag Resizer for Artifacts Panel
+    let isResizing = false;
+    artifactsResizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        artifactsResizer.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const newWidth = document.body.clientWidth - e.clientX;
+        if (newWidth > 300 && newWidth < 900) {
+            artifactsPanel.style.width = `${newWidth}px`;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            artifactsResizer.classList.remove('active');
+            document.body.style.cursor = 'default';
+        }
+    });
+
     tabPreviewBtn.addEventListener('click', () => {
         tabPreviewBtn.classList.add('active');
         tabCodeBtn.classList.remove('active');
@@ -352,10 +525,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     closeArtifactsBtn.addEventListener('click', () => {
         artifactsPanel.classList.add('collapsed');
+        artifactsResizer.style.display = 'none';
     });
 
     toggleArtifactsBtn.addEventListener('click', () => {
         artifactsPanel.classList.toggle('collapsed');
+        artifactsResizer.style.display = artifactsPanel.classList.contains('collapsed') ? 'none' : 'block';
     });
 
     copyArtifactBtn.addEventListener('click', () => {
