@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize Mermaid
     if (typeof mermaid !== 'undefined') {
         mermaid.initialize({ startOnLoad: false, theme: 'dark' });
     }
@@ -284,8 +283,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function sendMessage() {
-        let text = promptInput.value.trim();
+    async function sendMessage(overrideText = null) {
+        let text = overrideText || promptInput.value.trim();
         if (!text && attachedFiles.length === 0) return;
 
         if (welcomeScreen.style.display !== 'none') {
@@ -293,11 +292,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const selectedStyle = styleSelect.value;
-        if (selectedStyle && selectedStyle !== 'normal') {
+        if (!overrideText && selectedStyle && selectedStyle !== 'normal') {
             text += `\n\n[Writing Style Constraint: Please answer in a ${selectedStyle} tone.]`;
         }
 
-        if (attachedFiles.length > 0) {
+        if (!overrideText && attachedFiles.length > 0) {
             let fileAttachmentText = '\n\n<attached_files>\n';
             attachedFiles.forEach(f => {
                 fileAttachmentText += `<file name="${f.name}">\n${f.content}\n</file>\n`;
@@ -310,13 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
             threadTitle.innerText = text.length > 28 ? text.slice(0, 28) + '...' : text;
         }
 
-        appendUserMessage(text);
-        conversationHistory.push({ role: 'user', content: text });
-
-        promptInput.value = '';
-        promptInput.style.height = 'auto';
-        attachedFiles = [];
-        renderAttachmentChips();
+        if (!overrideText) {
+            appendUserMessage(text);
+            conversationHistory.push({ role: 'user', content: text });
+            promptInput.value = '';
+            promptInput.style.height = 'auto';
+            attachedFiles = [];
+            renderAttachmentChips();
+        }
 
         const assistantMessageObj = appendAssistantMessage();
         const contentDiv = assistantMessageObj.contentDiv;
@@ -386,6 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             } else if (data.type === 'content_block_delta') {
                                 fullAssistantText += data.delta.text;
                                 renderMarkdown(contentDiv, fullAssistantText);
+                                checkForArtifacts(fullAssistantText, contentDiv, false);
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             }
                         } catch (e) {}
@@ -396,13 +397,32 @@ document.addEventListener('DOMContentLoaded', () => {
             thinkingBadge.style.display = 'none';
             conversationHistory.push({ role: 'assistant', content: fullAssistantText });
             saveCurrentThread();
-            checkForArtifacts(fullAssistantText, contentDiv);
+            checkForArtifacts(fullAssistantText, contentDiv, true);
+
+            // Add Continue button if output ended during code generation or truncation
+            if (fullAssistantText.includes('```') && (fullAssistantText.match(/```/g) || []).length % 2 !== 0) {
+                appendContinueButton(contentDiv);
+            }
 
         } catch (err) {
             subagentStatusBar.style.display = 'none';
             thinkingBadge.style.display = 'none';
             contentDiv.innerText = 'Error connecting to Claude Peryl backend engine.';
         }
+    }
+
+    function appendContinueButton(container) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary';
+        btn.style.marginTop = '12px';
+        btn.style.fontSize = '12px';
+        btn.style.padding = '6px 12px';
+        btn.innerHTML = '<i class="fa-solid fa-play"></i> Continue Generating';
+        btn.addEventListener('click', () => {
+            btn.remove();
+            sendMessage('Please continue your previous response right from where you got cut off without repeating.');
+        });
+        container.appendChild(btn);
     }
 
     function appendUserMessage(text) {
@@ -459,40 +479,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function checkForArtifacts(text, parentElement) {
-        const artifactRegex = /```(html|jsx|tsx|svg|mermaid|markdown)\s*\n([\s\S]*?)```/g;
+    function checkForArtifacts(text, parentElement, isFinal = false) {
+        let codeBlocks = [];
+
+        // 1. Matched closed code blocks: ```html ... ```
+        const closedRegex = /```(html|jsx|tsx|svg|mermaid|markdown)\s*\n([\s\S]*?)```/g;
         let match;
+        while ((match = closedRegex.exec(text)) !== null) {
+            codeBlocks.push({ type: match[1], content: match[2].trim() });
+        }
+
+        // 2. If no closed block found and isFinal or streaming, match unclosed open block: ```html ...
+        if (codeBlocks.length === 0) {
+            const openRegex = /```(html|jsx|tsx|svg|mermaid|markdown)\s*\n([\s\S]+)$/i;
+            const openMatch = openRegex.exec(text);
+            if (openMatch) {
+                let unclosedCode = openMatch[2].trim();
+                if (unclosedCode.length > 50) {
+                    codeBlocks.push({ type: openMatch[1], content: unclosedCode, isUnclosed: true });
+                }
+            }
+        }
+
         let index = 1;
+        codeBlocks.forEach(item => {
+            const type = item.type;
+            let code = item.content;
+            if (code.length < 40) return;
 
-        while ((match = artifactRegex.exec(text)) !== null) {
-            const type = match[1];
-            const code = match[2].trim();
-            if (code.length < 40) continue;
-
-            const artId = `art_${Date.now()}_${index++}`;
+            const artId = `art_${type}_${index++}`;
             const artifactObj = {
                 id: artId,
-                title: `Interactive ${type.toUpperCase()} Artifact`,
+                title: `Interactive ${type.toUpperCase()} Artifact ${item.isUnclosed ? '(Live Preview)' : ''}`,
                 type: type,
                 content: code
             };
 
-            artifactsMap.set(artId, artifactObj);
+            const existing = parentElement.querySelector(`.artifact-banner[data-art-id="${artId}"]`);
+            if (!existing) {
+                artifactsMap.set(artId, artifactObj);
 
-            const banner = document.createElement('div');
-            banner.className = 'artifact-card-banner';
-            banner.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-cube" style="color: var(--accent-color);"></i>
-                    <span><strong>Artifact Created:</strong> ${artifactObj.title}</span>
-                </div>
-                <button class="btn-primary" style="padding: 4px 10px; font-size: 11px;">View Artifact</button>
-            `;
-            banner.addEventListener('click', () => openArtifact(artId));
-            parentElement.appendChild(banner);
+                const banner = document.createElement('div');
+                banner.className = 'artifact-card-banner artifact-banner';
+                banner.dataset.artId = artId;
+                banner.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-cube" style="color: var(--accent-color);"></i>
+                        <span><strong>Artifact Created:</strong> ${artifactObj.title}</span>
+                    </div>
+                    <button class="btn-primary" style="padding: 4px 10px; font-size: 11px;">View Artifact</button>
+                `;
+                banner.addEventListener('click', () => openArtifact(artId));
+                parentElement.appendChild(banner);
 
-            openArtifact(artId);
-        }
+                openArtifact(artId);
+            } else {
+                artifactsMap.set(artId, artifactObj);
+                if (activeArtifactId === artId) {
+                    openArtifact(artId);
+                }
+            }
+        });
 
         updateArtifactButtonState();
     }
@@ -519,6 +566,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof hljs !== 'undefined') hljs.highlightElement(artifactCodeBlock);
 
         let docContent = artifact.content;
+
+        // Auto-close missing tags if truncated
+        if (!docContent.includes('</html>') && docContent.includes('<html')) docContent += '</body></html>';
+
         if (artifact.type === 'jsx' || artifact.type === 'tsx') {
             docContent = `<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:20px;background:#18181b;color:#fff;}</style></head><body>${WINDOW_STORAGE_SCRIPT}<div id="root"></div><script type="text/babel">${docContent}\nReactDOM.createRoot(document.getElementById('root')).render(<App />);</script></body></html>`;
         } else if (artifact.type === 'html' || artifact.type === 'svg') {
@@ -615,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsModal.style.display = 'none';
     });
 
-    sendBtn.addEventListener('click', sendMessage);
+    sendBtn.addEventListener('click', () => sendMessage());
     promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();

@@ -67,12 +67,13 @@ async def convert_anthropic_to_openai(body: dict, web_context: str = "") -> dict
     identity_preamble = (
         "IDENTITY & SYSTEM CAPABILITIES:\n"
         "You are Claude Peryl 5, created by ashmil P.\n"
-        "You ARE fully equipped with real-time web search (via Tavily Search API), code execution sandbox, subagents, and interactive artifact rendering capabilities in this environment.\n\n"
-        "ARTIFACT CREATION INSTRUCTIONS:\n"
-        "You ARE capable of creating live renderable Artifacts in this application!\n"
-        "Whenever you create standalone code, HTML dashboards, React/JSX components, SVG drawings, Mermaid diagrams, Python scripts, or long-form documents, write them inside fenced code blocks (```html, ```jsx, ```svg, ```mermaid, ```markdown).\n"
-        "The Claude Peryl Desktop client interface automatically captures these blocks and renders them live inside an interactive split-screen Artifacts Panel for the user!\n"
-        "NEVER tell the user that you cannot create artifacts or that a side panel does not exist, because the Artifact side panel IS active and fully functional in this desktop app.\n"
+        "You ARE fully equipped with real-time web search (via Tavily Search API), code execution sandbox, subagents, and live interactive artifact rendering in this desktop environment.\n\n"
+        "CRITICAL ARTIFACT GENERATION INSTRUCTIONS:\n"
+        "1. Whenever the user requests an interactive application, dashboard, HTML/CSS/JS page, React/JSX component, SVG drawing, Mermaid diagram, or document, YOU MUST CREATE AN ARTIFACT.\n"
+        "2. ALWAYS wrap artifact code cleanly inside fenced code blocks: ```html, ```jsx, ```svg, ```mermaid, or ```markdown.\n"
+        "3. Write concise, self-contained, modular code so that your response fits efficiently within token limits while remaining 100% complete and functional.\n"
+        "4. The Claude Peryl Desktop client interface automatically captures these code blocks, auto-closes incomplete blocks if truncated, and renders them live in the split-screen Artifact side panel for the user!\n"
+        "5. NEVER claim that you cannot create artifacts or that a side panel does not exist, because Artifact rendering IS active and fully functional in this desktop app.\n"
     )
 
     system_text = identity_preamble + "\n\n" + active_system_prompt
@@ -97,19 +98,22 @@ async def convert_anthropic_to_openai(body: dict, web_context: str = "") -> dict
             content = "\n".join(text_blocks)
         messages.append({"role": role, "content": content or ""})
 
+    requested_tokens = body.get("max_tokens", 8192)
+    max_tokens = max(requested_tokens, 8192)
+
     return {
         "model": "anthropic/claude-opus-5",
         "messages": messages,
         "stream": body.get("stream", False),
         "temperature": body.get("temperature", 0.7),
-        "max_tokens": body.get("max_tokens", 4096),
+        "max_tokens": max_tokens,
     }
 
 async def stream_openai_to_anthropic(openai_payload: dict, headers: dict):
     model = "claude-peryl"
     msg_id = "msg_peryl_" + os.urandom(8).hex()
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
         async with client.stream("POST", HACKCLUB_URL, json=openai_payload, headers=headers) as response:
             if response.status_code != 200:
                 error_body = await response.aread()
@@ -204,7 +208,7 @@ async def handle_anthropic_messages(request: Request):
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
         )
     else:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             res = await client.post(HACKCLUB_URL, json=openai_payload, headers=clean_headers)
             data = res.json()
             if res.status_code != 200:
