@@ -54,6 +54,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeArtifactId = null;
     let savedThreads = JSON.parse(localStorage.getItem('claude_peryl_threads') || '[]');
 
+    const THINKING_WORDS = [
+        'Pondering...', 'Thinking...', 'Synthesizing...', 
+        'Flabbergasting...', 'Contemplating...', 'Architecting...', 
+        'Deconstructing...', 'Analyzing...'
+    ];
+
+    function getRandomThinkingWord() {
+        return THINKING_WORDS[Math.floor(Math.random() * THINKING_WORDS.length)];
+    }
+
     const WINDOW_STORAGE_SCRIPT = `
         <script>
             (function() {
@@ -79,7 +89,6 @@ document.addEventListener('DOMContentLoaded', () => {
         </script>
     `;
 
-    // Fetch system prompt on load
     fetch('/api/system_prompt')
         .then(r => r.json())
         .then(data => {
@@ -89,18 +98,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderThreadsList();
 
-    // Sidebar Toggle
     sidebarToggleBtn.addEventListener('click', () => {
         sidebar.classList.toggle('collapsed');
     });
 
-    // Auto-resize textarea
     promptInput.addEventListener('input', () => {
         promptInput.style.height = 'auto';
         promptInput.style.height = Math.min(promptInput.scrollHeight, 150) + 'px';
     });
 
-    // File Attachment Handler
     attachFileBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => {
         const files = Array.from(e.target.files);
@@ -142,7 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Web Search Selector Toggle
     webSearchToggle.addEventListener('click', () => {
         isWebSearchEnabled = !isWebSearchEnabled;
         webSearchToggle.classList.toggle('active', isWebSearchEnabled);
@@ -151,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
             : '<i class="fa-solid fa-globe" style="opacity:0.5;"></i> Web Search OFF';
     });
 
-    // Deep Research Toggle
     deepResearchToggle.addEventListener('click', () => {
         isDeepResearch = !isDeepResearch;
         deepResearchToggle.classList.toggle('active', isDeepResearch);
@@ -159,7 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modelSelect.value = isDeepResearch ? 'claude-peryl-deep-research' : 'claude-peryl';
     });
 
-    // Mode Selector Buttons
     modeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             modeBtns.forEach(b => b.classList.remove('active'));
@@ -179,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // New Chat Button
     newChatBtn.addEventListener('click', () => {
         saveCurrentThread();
         conversationHistory = [];
@@ -195,7 +197,6 @@ document.addEventListener('DOMContentLoaded', () => {
         threadTitle.innerText = 'New Conversation';
     });
 
-    // Search Threads Input
     searchThreadsInput.addEventListener('input', (e) => {
         renderThreadsList(e.target.value.toLowerCase().trim());
     });
@@ -267,7 +268,6 @@ document.addEventListener('DOMContentLoaded', () => {
             welcomeScreen.style.display = 'none';
         }
 
-        // Attach text files content to prompt
         if (attachedFiles.length > 0) {
             let fileAttachmentText = '\n\n<attached_files>\n';
             attachedFiles.forEach(f => {
@@ -292,6 +292,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const assistantMessageObj = appendAssistantMessage();
         const contentDiv = assistantMessageObj.contentDiv;
         const subagentProgressBox = assistantMessageObj.subagentProgressBox;
+        const thinkingBadge = assistantMessageObj.thinkingBadge;
+
+        thinkingBadge.style.display = 'inline-flex';
+        thinkingBadge.innerHTML = `<i class="fa-solid fa-brain"></i> <span>${getRandomThinkingWord()}</span>`;
 
         if (isDeepResearch) {
             subagentStatusBar.style.display = 'flex';
@@ -360,12 +364,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            thinkingBadge.style.display = 'none';
             conversationHistory.push({ role: 'assistant', content: fullAssistantText });
             saveCurrentThread();
             checkForArtifacts(fullAssistantText, contentDiv);
 
         } catch (err) {
             subagentStatusBar.style.display = 'none';
+            thinkingBadge.style.display = 'none';
             contentDiv.innerText = 'Error connecting to Claude Peryl backend engine.';
         }
     }
@@ -385,8 +391,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const wrapper = document.createElement('div');
         wrapper.className = 'message-wrapper assistant';
         wrapper.innerHTML = `
-            <div class="avatar assistant"><i class="fa-solid fa-sparkles"></i></div>
+            <div class="avatar assistant">
+                <img src="/static/logo.svg" alt="Claude Peryl Emblem" class="avatar-logo-img">
+            </div>
             <div style="flex: 1; max-width: 85%;">
+                <div class="thinking-badge" style="display: none;"></div>
                 <div class="subagent-card" style="display: none;"></div>
                 <div class="message-bubble assistant-text"></div>
             </div>
@@ -396,7 +405,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return {
             contentDiv: wrapper.querySelector('.assistant-text'),
-            subagentProgressBox: wrapper.querySelector('.subagent-card')
+            subagentProgressBox: wrapper.querySelector('.subagent-card'),
+            thinkingBadge: wrapper.querySelector('.thinking-badge')
         };
     }
 
@@ -485,7 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
         artifactIframe.src = URL.createObjectURL(blob);
     }
 
-    // Drag Resizer for Artifacts Panel
     let isResizing = false;
     artifactsResizer.addEventListener('mousedown', (e) => {
         isResizing = true;
