@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Claude Peryl
+GenericName=AI Chatbot Client
+Comment=Claude Peryl Desktop Client with Tavily Deep Research Subagents and Artifacts (ashmil P)
+Exec=/home/ashmilp/proxy/launch.sh
+Icon=dialog-information
+Terminal=false
+Categories=Utility;Development;Network;AI;
+Keywords=claude;peryl;ai;chat;chatbot;tavily;research;
+StartupWMClass=Claude Peryl Desktop

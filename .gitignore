@@ -1,0 +1,17 @@
+# Environment & Credentials
+.env
+*.env
+
+# Python & Virtual Environments
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.log
