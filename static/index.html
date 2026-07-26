@@ -53,6 +53,16 @@
                 </select>
             </div>
 
+            <div class="sidebar-model-selector">
+                <label for="style-select">Writing Style</label>
+                <select id="style-select" class="dropdown">
+                    <option value="normal">Default Style</option>
+                    <option value="concise">Concise & Direct</option>
+                    <option value="explanatory">Detailed & Explanatory</option>
+                    <option value="formal">Formal & Academic</option>
+                </select>
+            </div>
+
             <div class="chat-history-container">
                 <div class="section-title">Recent Chats</div>
                 <ul id="chat-threads-list" class="threads-list">
@@ -61,6 +71,9 @@
             </div>
 
             <div class="sidebar-footer">
+                <button id="btn-export-chat" class="btn-icon-text">
+                    <i class="fa-solid fa-file-export"></i> Export Chat
+                </button>
                 <button id="btn-settings" class="btn-icon-text">
                     <i class="fa-solid fa-gear"></i> Settings
                 </button>
@@ -164,6 +177,7 @@
                 <div class="artifacts-controls">
                     <button id="btn-artifact-tab-preview" class="tab-btn active">Preview</button>
                     <button id="btn-artifact-tab-code" class="tab-btn">Code</button>
+                    <button id="btn-download-artifact" class="btn-icon" title="Download Artifact File"><i class="fa-solid fa-download"></i></button>
                     <button id="btn-copy-artifact" class="btn-icon" title="Copy Content"><i class="fa-regular fa-copy"></i></button>
                     <button id="btn-close-artifacts" class="btn-icon" title="Close Panel"><i class="fa-solid fa-xmark"></i></button>
                 </div>
@@ -205,6 +219,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

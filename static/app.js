@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Mermaid
+    if (typeof mermaid !== 'undefined') {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+    }
+
     // DOM Elements
     const sidebar = document.getElementById('sidebar');
     const sidebarToggleBtn = document.getElementById('btn-sidebar-toggle');
@@ -8,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendBtn = document.getElementById('btn-send');
     const newChatBtn = document.getElementById('btn-new-chat');
     const modelSelect = document.getElementById('model-select');
+    const styleSelect = document.getElementById('style-select');
     const modeBtns = document.querySelectorAll('.mode-btn');
     const threadTitle = document.getElementById('current-thread-title');
     const activeModeBadge = document.getElementById('active-mode-badge');
@@ -24,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Thread Search & History DOM
     const searchThreadsInput = document.getElementById('search-threads-input');
     const threadsList = document.getElementById('chat-threads-list');
+    const exportChatBtn = document.getElementById('btn-export-chat');
 
     // Artifact DOM & Resizer
     const artifactsPanel = document.getElementById('artifacts-panel');
@@ -37,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabPreviewBtn = document.getElementById('btn-artifact-tab-preview');
     const tabCodeBtn = document.getElementById('btn-artifact-tab-code');
     const copyArtifactBtn = document.getElementById('btn-copy-artifact');
+    const downloadArtifactBtn = document.getElementById('btn-download-artifact');
 
     // Settings DOM
     const settingsBtn = document.getElementById('btn-settings');
@@ -65,6 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const WINDOW_STORAGE_SCRIPT = `
+        <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+        <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
         <script>
             (function() {
                 const storageStore = new Map();
@@ -201,6 +212,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderThreadsList(e.target.value.toLowerCase().trim());
     });
 
+    exportChatBtn.addEventListener('click', () => {
+        if (conversationHistory.length === 0) return;
+        let exportText = `# ${threadTitle.innerText}\n\n`;
+        conversationHistory.forEach(msg => {
+            exportText += `### ${msg.role === 'user' ? 'User' : 'Claude Peryl'}\n${msg.content}\n\n`;
+        });
+        const blob = new Blob([exportText], { type: 'text/markdown' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${threadTitle.innerText.replace(/[^a-z0-9]/gi, '_')}.md`;
+        a.click();
+    });
+
     function renderThreadsList(filterText = '') {
         threadsList.innerHTML = '';
         savedThreads.filter(t => t.title.toLowerCase().includes(filterText)).forEach((thread, idx) => {
@@ -266,6 +290,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
+        }
+
+        const selectedStyle = styleSelect.value;
+        if (selectedStyle && selectedStyle !== 'normal') {
+            text += `\n\n[Writing Style Constraint: Please answer in a ${selectedStyle} tone.]`;
         }
 
         if (attachedFiles.length > 0) {
@@ -416,6 +445,15 @@ document.addEventListener('DOMContentLoaded', () => {
             element.querySelectorAll('pre code').forEach((block) => {
                 if (typeof hljs !== 'undefined') hljs.highlightElement(block);
             });
+            if (typeof mermaid !== 'undefined') {
+                element.querySelectorAll('code.language-mermaid').forEach((block, idx) => {
+                    const mermaidDiv = document.createElement('div');
+                    mermaidDiv.className = 'mermaid';
+                    mermaidDiv.textContent = block.textContent;
+                    block.parentNode.replaceWith(mermaidDiv);
+                });
+                try { mermaid.run(); } catch(e) {}
+            }
         } else {
             element.innerText = markdownText;
         }
@@ -481,7 +519,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof hljs !== 'undefined') hljs.highlightElement(artifactCodeBlock);
 
         let docContent = artifact.content;
-        if (artifact.type === 'html' || artifact.type === 'svg') {
+        if (artifact.type === 'jsx' || artifact.type === 'tsx') {
+            docContent = `<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:20px;background:#18181b;color:#fff;}</style></head><body>${WINDOW_STORAGE_SCRIPT}<div id="root"></div><script type="text/babel">${docContent}\nReactDOM.createRoot(document.getElementById('root')).render(<App />);</script></body></html>`;
+        } else if (artifact.type === 'html' || artifact.type === 'svg') {
             if (!docContent.includes('<html')) {
                 docContent = `<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:20px;background:#fff;color:#111;}</style></head><body>${WINDOW_STORAGE_SCRIPT}${docContent}</body></html>`;
             } else {
@@ -494,6 +534,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const blob = new Blob([docContent], { type: 'text/html' });
         artifactIframe.src = URL.createObjectURL(blob);
     }
+
+    downloadArtifactBtn.addEventListener('click', () => {
+        if (activeArtifactId && artifactsMap.has(activeArtifactId)) {
+            const artifact = artifactsMap.get(activeArtifactId);
+            const extMap = { html: 'html', jsx: 'jsx', svg: 'svg', mermaid: 'mmd', markdown: 'md' };
+            const ext = extMap[artifact.type] || 'txt';
+            const blob = new Blob([artifact.content], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `artifact_${activeArtifactId}.${ext}`;
+            a.click();
+        }
+    });
 
     let isResizing = false;
     artifactsResizer.addEventListener('mousedown', (e) => {

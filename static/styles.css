@@ -530,6 +530,11 @@ body, html {
     word-break: break-word;
 }
 
+/* FIX: Hide empty message bubble to eliminate blank gray box during thinking state */
+.message-bubble:empty {
+    display: none !important;
+}
+
 .message-wrapper.user .message-bubble {
     background: #2b2b32;
     border-color: #40404a;
