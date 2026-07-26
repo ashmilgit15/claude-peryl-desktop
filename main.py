@@ -1,6 +1,8 @@
 import sys
 import os
 import json
+import socket
+import time
 import asyncio
 import threading
 import httpx
@@ -219,6 +221,16 @@ def run_backend():
     import uvicorn
     uvicorn.run(api, host="127.0.0.1", port=3000, log_level="warning")
 
+def wait_for_backend(host="127.0.0.1", port=3000, timeout=10.0) -> bool:
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except (OSError, ConnectionRefusedError):
+            time.sleep(0.1)
+    return False
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -226,8 +238,13 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
         
         self.browser = QWebEngineView()
-        self.browser.setUrl(QUrl("http://127.0.0.1:3000/"))
         self.setCentralWidget(self.browser)
+        
+        # Wait for FastAPI server to start accepting connections before navigating
+        if wait_for_backend():
+            self.browser.setUrl(QUrl("http://127.0.0.1:3000/"))
+        else:
+            print("Warning: Backend server connection timed out.")
 
 if __name__ == "__main__":
     backend_thread = threading.Thread(target=run_backend, daemon=True)
