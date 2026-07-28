@@ -399,7 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
             saveCurrentThread();
             checkForArtifacts(fullAssistantText, contentDiv, true);
 
-            // Add Continue button if output ended during code generation or truncation
             if (fullAssistantText.includes('```') && (fullAssistantText.match(/```/g) || []).length % 2 !== 0) {
                 appendContinueButton(contentDiv);
             }
@@ -459,12 +458,59 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function preprocessMath(text) {
+        const mathMap = [];
+
+        // 1. Block math: $$...$$ or \[...\]
+        let processed = text.replace(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\])/g, (match) => {
+            const key = `%%%MATH_BLOCK_${mathMap.length}%%%`;
+            mathMap.push({ key, value: match });
+            return key;
+        });
+
+        // 2. Inline math: $...$ or \(...\)
+        processed = processed.replace(/(\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g, (match) => {
+            const key = `%%%MATH_INLINE_${mathMap.length}%%%`;
+            mathMap.push({ key, value: match });
+            return key;
+        });
+
+        return { processedText: processed, mathMap };
+    }
+
+    function restoreMath(html, mathMap) {
+        let restored = html;
+        mathMap.forEach(item => {
+            restored = restored.replace(item.key, item.value);
+        });
+        return restored;
+    }
+
     function renderMarkdown(element, markdownText) {
         if (typeof marked !== 'undefined') {
-            element.innerHTML = marked.parse(markdownText);
+            const { processedText, mathMap } = preprocessMath(markdownText);
+            let parsedHtml = marked.parse(processedText);
+            parsedHtml = restoreMath(parsedHtml, mathMap);
+            element.innerHTML = parsedHtml;
+
             element.querySelectorAll('pre code').forEach((block) => {
                 if (typeof hljs !== 'undefined') hljs.highlightElement(block);
             });
+
+            if (typeof renderMathInElement !== 'undefined') {
+                try {
+                    renderMathInElement(element, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '\\[', right: '\\]', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false}
+                        ],
+                        throwOnError: false
+                    });
+                } catch(e) {}
+            }
+
             if (typeof mermaid !== 'undefined') {
                 element.querySelectorAll('code.language-mermaid').forEach((block, idx) => {
                     const mermaidDiv = document.createElement('div');
@@ -482,14 +528,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkForArtifacts(text, parentElement, isFinal = false) {
         let codeBlocks = [];
 
-        // 1. Matched closed code blocks: ```html ... ```
         const closedRegex = /```(html|jsx|tsx|svg|mermaid|markdown)\s*\n([\s\S]*?)```/g;
         let match;
         while ((match = closedRegex.exec(text)) !== null) {
             codeBlocks.push({ type: match[1], content: match[2].trim() });
         }
 
-        // 2. If no closed block found and isFinal or streaming, match unclosed open block: ```html ...
         if (codeBlocks.length === 0) {
             const openRegex = /```(html|jsx|tsx|svg|mermaid|markdown)\s*\n([\s\S]+)$/i;
             const openMatch = openRegex.exec(text);
@@ -567,7 +611,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let docContent = artifact.content;
 
-        // Auto-close missing tags if truncated
         if (!docContent.includes('</html>') && docContent.includes('<html')) docContent += '</body></html>';
 
         if (artifact.type === 'jsx' || artifact.type === 'tsx') {

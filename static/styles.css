@@ -530,7 +530,6 @@ body, html {
     word-break: break-word;
 }
 
-/* FIX: Hide empty message bubble to eliminate blank gray box during thinking state */
 .message-bubble:empty {
     display: none !important;
 }
@@ -558,6 +557,18 @@ body, html {
 .message-bubble code {
     font-family: 'Fira Code', Consolas, Monaco, monospace;
     font-size: 13px;
+}
+
+/* KaTeX Math Styling */
+.katex-display {
+    margin: 0.8em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 0;
+}
+.katex {
+    font-size: 1.08em;
+    color: #f3f3f5;
 }
 
 /* Claude 3.7 Style Thinking / Pondering Badge */
