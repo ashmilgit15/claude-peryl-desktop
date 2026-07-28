@@ -14,6 +14,8 @@ HACKCLUB_URL = os.getenv("HACKCLUB_URL", "https://ai.hackclub.com/proxy/v1/chat/
 HACKCLUB_KEY = os.getenv("HACKCLUB_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
+DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct"
+
 class AgentEngine:
     def __init__(self, api_key: str = HACKCLUB_KEY, endpoint: str = HACKCLUB_URL, tavily_key: str = TAVILY_API_KEY):
         self.api_key = api_key or HACKCLUB_KEY
@@ -110,6 +112,41 @@ class AgentEngine:
         formatted.append("</web_search_results>")
         return "\n".join(formatted)
 
+    def process_attachments(self, attachments: List[Dict[str, Any]]) -> str:
+        """Format uploaded file attachments (text files, code files, image descriptions) into prompt context."""
+        if not attachments:
+            return ""
+        
+        formatted_parts = ["\n\n=== ATTACHED FILES & MEDIA ==="]
+        for idx, att in enumerate(attachments, 1):
+            if isinstance(att, str):
+                formatted_parts.append(f"--- ATTACHED ITEM #{idx} ---\n{att}")
+                continue
+            if not isinstance(att, dict):
+                continue
+
+            name = att.get("name") or att.get("file_name") or att.get("filename") or f"file_{idx}"
+            file_type = att.get("type") or att.get("media_type") or "text/plain"
+            content = att.get("content") or att.get("text") or att.get("data") or ""
+            description = att.get("description") or ""
+
+            if file_type.startswith("image/") or att.get("type") == "image":
+                img_info = f"[Attached Image #{idx}: {name} ({file_type})]"
+                if description:
+                    img_info += f"\nDescription: {description}"
+                if content and not content.startswith("data:image"):
+                    img_info += f"\nContent/URL: {content}"
+                formatted_parts.append(img_info)
+            else:
+                formatted_parts.append(
+                    f"--- ATTACHED FILE #{idx}: {name} ({file_type}) ---\n"
+                    f"{content or description}\n"
+                    f"--- END ATTACHED FILE #{idx} ---"
+                )
+
+        formatted_parts.append("=== END ATTACHMENTS ===\n")
+        return "\n".join(formatted_parts)
+
     async def execute_python_sandbox(self, code: str) -> Dict[str, str]:
         """Execute Python code in a safe subprocess execution context."""
         try:
@@ -129,11 +166,12 @@ class AgentEngine:
         except Exception as e:
             return {"stdout": "", "stderr": f"Execution error: {str(e)}", "exit_code": "-1"}
 
-    async def run_subagent(self, role: str, prompt: str) -> Dict[str, Any]:
+    async def run_subagent(self, role: str, prompt: str, model: Optional[str] = None) -> Dict[str, Any]:
         """Run a specialized subagent task."""
+        target_model = model or DEFAULT_MODEL
         subagent_prompt = f"You are a specialized subagent with role: {role}.\nTask: {prompt}\nProvide a concise, factual summary of findings."
         payload = {
-            "model": "anthropic/claude-opus-5",
+            "model": target_model,
             "messages": [{"role": "user", "content": subagent_prompt}],
             "temperature": 0.3,
             "max_tokens": 1500
@@ -149,8 +187,9 @@ class AgentEngine:
             pass
         return {"role": role, "status": "error", "output": f"Subagent {role} failed to respond."}
 
-    async def deep_research_stream(self, topic: str) -> AsyncGenerator[Dict[str, Any], None]:
+    async def deep_research_stream(self, topic: str, model: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream progress of Deep Dive Research Agent and Subagents using Tavily."""
+        target_model = model or DEFAULT_MODEL
         yield {"type": "subagent_start", "role": "Research Orchestrator", "message": f"Deconstructing deep research topic with Tavily Search API: '{topic}'..."}
         await asyncio.sleep(0.3)
 
@@ -177,7 +216,8 @@ class AgentEngine:
             
             sub_res = await self.run_subagent(
                 role=f"Tavily Research Subagent #{i}",
-                prompt=f"Analyze angle: {angle}\nContext from Tavily Deep Search: {json.dumps(search_results)}"
+                prompt=f"Analyze angle: {angle}\nContext from Tavily Deep Search: {json.dumps(search_results)}",
+                model=target_model
             )
             subagent_outputs.append(sub_res["output"])
             
@@ -201,30 +241,33 @@ class AgentEngine:
         )
 
         payload = {
-            "model": "anthropic/claude-opus-5",
+            "model": target_model,
             "messages": [{"role": "user", "content": synthesis_prompt}],
             "temperature": 0.5,
             "max_tokens": 4000,
             "stream": True
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("POST", self.endpoint, json=payload, headers=self.headers) as response:
-                if response.status_code == 200:
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            data_str = line[6:].strip()
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(data_str)
-                                choices = chunk.get("choices", [])
-                                if choices:
-                                    delta = choices[0].get("delta", {}).get("content", "")
-                                    if delta:
-                                        yield {"type": "text_delta", "delta": delta}
-                            except json.JSONDecodeError:
-                                continue
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream("POST", self.endpoint, json=payload, headers=self.headers) as response:
+                    if response.status_code == 200:
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                data_str = line[6:].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    chunk = json.loads(data_str)
+                                    choices = chunk.get("choices", [])
+                                    if choices:
+                                        delta = choices[0].get("delta", {}).get("content", "")
+                                        if delta:
+                                            yield {"type": "text_delta", "delta": delta}
+                                except json.JSONDecodeError:
+                                    continue
+        except Exception as e:
+            yield {"type": "text_delta", "delta": f"\n\n[Error generating synthesis report: {str(e)}]"}
 
     def extract_artifacts(self, text: str) -> List[Dict[str, Any]]:
         """Extract renderable artifacts (HTML, SVG, React, Markdown, Chart) from generated text."""

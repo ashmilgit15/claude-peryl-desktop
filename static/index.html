@@ -3,163 +3,297 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claude Peryl Desktop</title>
+    <title>Claude Desktop</title>
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Highlight.js for Code Highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <!-- KaTeX for Math Equations -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body class="dark-theme">
+<body class="claude-dark-theme">
     <div id="app-container">
         <!-- Sidebar Navigation -->
         <aside id="sidebar">
-            <div class="sidebar-header">
+            <div class="sidebar-top">
                 <div class="brand-row">
-                    <div class="brand">
-                        <img src="/static/logo.svg" alt="Claude Peryl Logo" class="brand-logo-img">
-                        <span class="brand-name">Claude Peryl</span>
-                        <span class="badge">v5.0</span>
+                    <div class="brand-title">
+                        <span class="brand-name">Claude</span>
+                    </div>
+                    <div class="sidebar-top-icons">
+                        <button id="btn-sidebar-search" class="icon-btn" title="Search Chats">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                        <button id="btn-sidebar-collapse" class="icon-btn" title="Collapse Sidebar">
+                            <i class="fa-regular fa-window-maximize"></i>
+                        </button>
                     </div>
                 </div>
-                <button id="btn-new-chat" class="btn-primary">
-                    <i class="fa-solid fa-plus"></i> New Chat
+
+                <button id="btn-new-chat" class="btn-new-chat">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>New chat</span>
+                </button>
+
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-view="chats">
+                        <i class="fa-regular fa-message"></i>
+                        <span>Chats</span>
+                    </button>
+                    <button class="nav-item" data-view="projects" id="btn-nav-projects">
+                        <i class="fa-regular fa-folder"></i>
+                        <span>Projects</span>
+                    </button>
+                    <button class="nav-item" data-view="artifacts" id="btn-nav-artifacts">
+                        <i class="fa-solid fa-shapes"></i>
+                        <span>Artifacts</span>
+                    </button>
+                    <button class="nav-item" data-view="code" id="btn-nav-code">
+                        <i class="fa-solid fa-code"></i>
+                        <span>Code</span>
+                        <span class="badge-upgrade">Upgrade</span>
+                    </button>
+                    <button class="nav-item" data-view="customize" id="btn-nav-customize">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Customize</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Products Section -->
+            <div class="sidebar-section">
+                <div class="section-label">Products</div>
+                <button class="nav-item" id="btn-product-design">
+                    <i class="fa-solid fa-palette"></i>
+                    <span>Design</span>
                 </button>
             </div>
 
-            <div class="search-threads-box">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="search-threads-input" class="search-threads-input" placeholder="Search chats...">
-            </div>
-
-            <div class="sidebar-mode-selector">
-                <label>Mode</label>
-                <div class="mode-toggle-group">
-                    <button class="mode-btn active" data-mode="standard">
-                        <i class="fa-solid fa-message"></i> Standard
-                    </button>
-                    <button class="mode-btn" data-mode="deep-research">
-                        <i class="fa-solid fa-brain"></i> Deep Dive
+            <!-- Recents Section -->
+            <div class="sidebar-section recents-section">
+                <div class="section-header">
+                    <span class="section-label">Recents</span>
+                    <button id="btn-filter-recents" class="icon-btn-sm" title="Sort Recents">
+                        <i class="fa-solid fa-arrow-down-up-across-line"></i>
                     </button>
                 </div>
-            </div>
-
-            <div class="sidebar-model-selector">
-                <label for="model-select">Model</label>
-                <select id="model-select" class="dropdown">
-                    <option value="claude-peryl">Claude Peryl 5 (Default)</option>
-                    <option value="claude-peryl-opus">Claude Peryl Opus 4.8</option>
-                    <option value="claude-peryl-sonnet">Claude Peryl Sonnet 4.6</option>
-                    <option value="claude-peryl-deep-research">Claude Peryl Deep Research Agent</option>
-                </select>
-            </div>
-
-            <div class="sidebar-model-selector">
-                <label for="style-select">Writing Style</label>
-                <select id="style-select" class="dropdown">
-                    <option value="normal">Default Style</option>
-                    <option value="concise">Concise & Direct</option>
-                    <option value="explanatory">Detailed & Explanatory</option>
-                    <option value="formal">Formal & Academic</option>
-                </select>
-            </div>
-
-            <div class="chat-history-container">
-                <div class="section-title">Recent Chats</div>
+                <div class="threads-search-container" id="threads-search-container" style="display: none;">
+                    <input type="text" id="search-threads-input" placeholder="Search past conversations..." autocomplete="off">
+                </div>
                 <ul id="chat-threads-list" class="threads-list">
-                    <!-- Dynamic Thread items -->
+                    <!-- Dynamic Thread items rendered via app.js -->
                 </ul>
             </div>
 
-            <div class="sidebar-footer">
-                <button id="btn-export-chat" class="btn-icon-text">
-                    <i class="fa-solid fa-file-export"></i> Export Chat
-                </button>
-                <button id="btn-settings" class="btn-icon-text">
-                    <i class="fa-solid fa-gear"></i> Settings
-                </button>
-                <div class="user-credits">Created by ashmil P</div>
+            <!-- User Footer Profile Card -->
+            <div class="sidebar-user-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div class="user-meta">
+                        <span class="user-name">Ashmil</span>
+                        <span class="user-plan">Free plan</span>
+                    </div>
+                </div>
+                <div class="user-actions">
+                    <button id="btn-user-download" class="icon-btn-sm" title="Export & Desktop App Data">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                    <button id="btn-user-menu" class="icon-btn-sm" title="User Options">
+                        <i class="fa-solid fa-chevron-up"></i>
+                    </button>
+                </div>
             </div>
         </aside>
 
-        <!-- Main Chat Area -->
+        <!-- Main Chat View Area -->
         <main id="chat-section">
+            <!-- Header Bar -->
             <header class="chat-header">
                 <div class="header-left">
-                    <button id="btn-sidebar-toggle" class="btn-sidebar-toggle" title="Toggle Sidebar">
+                    <button id="btn-sidebar-expand" class="icon-btn header-sidebar-toggle" style="display: none;" title="Expand Sidebar">
                         <i class="fa-solid fa-bars"></i>
                     </button>
-                    <div class="header-info">
-                        <h2 id="current-thread-title">New Conversation</h2>
-                        <span id="active-mode-badge" class="badge-mode">Standard Chat</span>
+                    <!-- Chat Title with Dropdown Arrow -->
+                    <div class="chat-title-dropdown-wrapper">
+                        <button id="chat-title-btn" class="chat-title-btn">
+                            <span id="current-thread-title">Defining a relation on set N</span>
+                            <i class="fa-solid fa-chevron-down title-arrow"></i>
+                        </button>
+                        <div id="chat-title-menu" class="dropdown-menu" style="display: none;">
+                            <button class="dropdown-item" id="menu-rename-chat">
+                                <i class="fa-regular fa-pen-to-square"></i> Rename chat
+                            </button>
+                            <button class="dropdown-item" id="menu-export-chat">
+                                <i class="fa-solid fa-file-export"></i> Export chat (Markdown)
+                            </button>
+                            <button class="dropdown-item text-danger" id="menu-delete-chat">
+                                <i class="fa-regular fa-trash-can"></i> Delete chat
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="header-actions">
-                    <button id="btn-toggle-artifacts" class="btn-secondary" style="display: none;">
-                        <i class="fa-solid fa-code"></i> Artifacts (<span id="artifact-count">0</span>)
+
+                <div class="header-center">
+                    <div class="plan-upgrade-banner">
+                        <span>Free plan · </span>
+                        <button id="btn-plan-upgrade" class="link-upgrade">Upgrade</button>
+                        <button id="btn-dismiss-plan-banner" class="btn-close-sm"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <button id="btn-toggle-artifacts" class="header-icon-btn" title="View Artifacts">
+                        <i class="fa-regular fa-file-lines"></i>
+                    </button>
+                    <button id="btn-share-chat" class="btn-share">
+                        <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                        <span>Share</span>
                     </button>
                 </div>
             </header>
 
-            <div id="messages-container" class="messages-scroll">
-                <!-- Welcome Screen -->
-                <div id="welcome-screen" class="welcome-box">
-                    <div class="welcome-icon">
-                        <img src="/static/logo.svg" alt="Claude Peryl Emblem" class="welcome-logo-img">
-                    </div>
-                    <h1>What can Claude Peryl help you with today?</h1>
-                    <p>Powered by ashmil P's Claude Peryl 5 with Tavily Web Search and Interactive Artifacts.</p>
-                    <div class="prompt-suggestions">
-                        <button class="suggestion-card" data-prompt="Search the web for the latest developments in quantum computing and AI in 2026.">
-                            <i class="fa-solid fa-globe"></i>
-                            <div>
-                                <strong>Web Search</strong>
-                                <div style="font-size: 11.5px; opacity: 0.7;">Latest AI & Quantum breakthroughs</div>
-                            </div>
-                        </button>
-                        <button class="suggestion-card" data-prompt="Conduct a deep dive research report on Arch Linux & CachyOS kernel optimizations.">
-                            <i class="fa-solid fa-brain"></i>
-                            <div>
-                                <strong>Deep Research</strong>
-                                <div style="font-size: 11.5px; opacity: 0.7;">CachyOS Kernel & Hyprland tuning</div>
-                            </div>
-                        </button>
-                        <button class="suggestion-card" data-prompt="Create an interactive HTML/JS financial dashboard artifact.">
-                            <i class="fa-solid fa-chart-pie"></i>
-                            <div>
-                                <strong>Interactive Artifact</strong>
-                                <div style="font-size: 11.5px; opacity: 0.7;">Budget tracker dashboard app</div>
-                            </div>
-                        </button>
-                    </div>
+            <!-- Floating Notification Toast -->
+            <div id="claude-notification-banner" class="claude-notification-card">
+                <span class="notification-text">Want to be notified when Claude responds?</span>
+                <div class="notification-actions">
+                    <button id="btn-notify-enable" class="btn-notify">Notify</button>
+                    <button id="btn-notify-close" class="btn-close-sm"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
 
-            <!-- Input Area -->
-            <div id="input-area">
-                <div id="subagent-status-bar" class="subagent-bar" style="display: none;">
-                    <div class="spinner"></div>
-                    <span id="subagent-status-text">Subagents researching topic...</span>
-                </div>
-                <div class="input-wrapper">
-                    <div id="attachment-preview" class="attachment-preview-box"></div>
-                    <textarea id="prompt-input" placeholder="Message Claude Peryl... (Shift+Enter for new line)" rows="1"></textarea>
-                    <div class="input-toolbar">
-                        <div class="toolbar-left">
-                            <button id="btn-attach-file" class="btn-attach" title="Attach Text / Code / Image / PDF File">
-                                <i class="fa-solid fa-paperclip"></i>
-                            </button>
-                            <input type="file" id="file-input" style="display:none;" multiple>
-                            <button id="btn-toggle-web-search" class="chip-btn active" title="Toggle Tavily Live Web Search">
-                                <i class="fa-solid fa-globe"></i> Web Search ON
-                            </button>
-                            <button id="btn-toggle-deep-research" class="chip-btn" title="Toggle Deep Research Subagent Mode">
-                                <i class="fa-solid fa-network-wired"></i> Deep Research Subagents
-                            </button>
-                        </div>
-                        <button id="btn-send" class="btn-send">
-                            <i class="fa-solid fa-paper-plane"></i>
+            <!-- Messages Stream Area -->
+            <div id="messages-container" class="messages-scroll">
+                <!-- Welcome Screen (Shown if chat is empty) -->
+                <div id="welcome-screen" class="welcome-box" style="display: none;">
+                    <div class="welcome-terracotta-emblem">
+                        <svg width="48" height="48" viewBox="0 0 100 100" fill="none">
+                            <g transform="translate(50,50)">
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(30)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(60)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(90)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(120)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(150)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(180)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(210)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(240)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(270)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(300)" />
+                                <rect x="-6" y="-40" width="12" height="24" rx="6" fill="#d97757" transform="rotate(330)" />
+                            </g>
+                        </svg>
+                    </div>
+                    <h1>What can Claude help you with today?</h1>
+                    <div class="prompt-suggestions">
+                        <button class="suggestion-card" data-prompt="Define a relation R on the set N with mathematical definitions and examples.">
+                            <i class="fa-solid fa-square-root-variable"></i>
+                            <div>
+                                <strong>Mathematics & Relations</strong>
+                                <span>Define a relation on set N</span>
+                            </div>
+                        </button>
+                        <button class="suggestion-card" data-prompt="Run a deep research dive into quantum computing advances in 2026.">
+                            <i class="fa-solid fa-network-wired"></i>
+                            <div>
+                                <strong>Deep Research Agent</strong>
+                                <span>Multi-source research report</span>
+                            </div>
+                        </button>
+                        <button class="suggestion-card" data-prompt="Create an interactive HTML5 budget calculator artifact.">
+                            <i class="fa-solid fa-cubes"></i>
+                            <div>
+                                <strong>Interactive Artifact</strong>
+                                <span>HTML/JS live app</span>
+                            </div>
                         </button>
                     </div>
+                </div>
+
+                <!-- Messages Thread Content will be dynamically inserted here -->
+            </div>
+
+            <!-- Deep Research Subagent Status Bar -->
+            <div id="subagent-status-bar" class="subagent-bar" style="display: none;">
+                <div class="subagent-spinner">
+                    <svg width="20" height="20" viewBox="0 0 100 100" class="starburst-rotate">
+                        <g transform="translate(50,50)">
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(45)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(90)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(135)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(180)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(225)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(270)" />
+                            <rect x="-5" y="-35" width="10" height="20" rx="5" fill="#d97757" transform="rotate(315)" />
+                        </g>
+                    </svg>
+                </div>
+                <span id="subagent-status-text">Subagents querying Tavily Search API...</span>
+            </div>
+
+            <!-- Floating Input Card Area -->
+            <div id="input-area">
+                <div class="input-card">
+                    <div id="attachment-preview" class="attachment-preview-box" style="display: none;"></div>
+                    <textarea id="prompt-input" placeholder="Write a message..." rows="1"></textarea>
+                    
+                    <div class="input-bottom-bar">
+                        <div class="input-left-actions">
+                            <button id="btn-attach-file" class="btn-input-plus" title="Add content (+)">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                            <input type="file" id="file-input" style="display:none;" multiple>
+                        </div>
+
+                        <div class="input-right-actions">
+                            <!-- Model Selector Dropdown -->
+                            <div class="model-dropdown-wrapper">
+                                <button id="model-select-btn" class="model-select-btn">
+                                    <span id="selected-model-name">Opus 4.8</span>
+                                    <i class="fa-solid fa-chevron-down dropdown-caret"></i>
+                                </button>
+                                <div id="model-select-menu" class="dropdown-menu model-menu" style="display: none;">
+                                    <div class="menu-header">Select Model</div>
+                                    <button class="dropdown-item active" data-model="claude-peryl-opus">
+                                        <div class="model-option-title">Opus 4.8</div>
+                                        <div class="model-option-desc">Deep creative & analysis powerhouse</div>
+                                    </button>
+                                    <button class="dropdown-item" data-model="claude-3-7-sonnet-extra">
+                                        <div class="model-option-title">Sonnet 5 Extra</div>
+                                        <div class="model-option-desc">Most intelligent model for high-reasoning tasks</div>
+                                    </button>
+                                    <button class="dropdown-item" data-model="claude-peryl-sonnet">
+                                        <div class="model-option-title">Sonnet 4.6</div>
+                                        <div class="model-option-desc">Balanced speed and intelligence</div>
+                                    </button>
+                                    <button class="dropdown-item" data-model="claude-peryl-deep-research">
+                                        <div class="model-option-title">Deep Research Agent</div>
+                                        <div class="model-option-desc">Multi-step web subagent research synthesis</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Voice Input Microphone Button -->
+                            <button id="btn-voice-input" class="btn-input-icon" title="Voice Input (Speech Recognition)">
+                                <i class="fa-solid fa-microphone"></i>
+                            </button>
+
+                            <!-- Audio Speech Synthesis Player Toggle -->
+                            <button id="btn-voice-output-toggle" class="btn-input-icon" title="Audio Response Read Aloud Toggle">
+                                <i class="fa-solid fa-bars-staggered"></i>
+                            </button>
+
+                            <!-- Send Message Button -->
+                            <button id="btn-send" class="btn-send-message" title="Send message">
+                                <i class="fa-solid fa-arrow-up"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-disclaimer">
+                    Claude is AI and can make mistakes. Please double-check responses.
                 </div>
             </div>
         </main>
@@ -193,29 +327,88 @@
         </aside>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay" style="display: none;">
+    <!-- Modals (Projects, Code, Customize Settings) -->
+
+    <!-- Projects Modal -->
+    <div id="projects-modal" class="modal-overlay" style="display: none;">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Claude Peryl Settings</h3>
-                <button id="btn-close-modal" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                <h3>Projects Workspace</h3>
+                <button class="btn-close-modal" data-modal="projects-modal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label>Active System Prompt (ashmil P model prompt)</label>
-                    <textarea id="sys-prompt-editor" rows="8"></textarea>
+                <div class="project-create-box">
+                    <label>Create New Project</label>
+                    <div class="input-row">
+                        <input type="text" id="project-name-input" placeholder="Project name (e.g., Mathematics & Calculus)...">
+                        <button id="btn-create-project" class="btn-secondary-custom">Create</button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Tavily Search API Key</label>
-                    <input type="password" id="tavily-key-input" value="••••••••••••••••••••••••••••">
+                <div class="project-list-container">
+                    <label>Your Projects</label>
+                    <ul id="projects-list" class="projects-list">
+                        <!-- Dynamic projects -->
+                    </ul>
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>Project Instructions / Knowledge Base Context</label>
+                    <textarea id="project-instructions-input" rows="4" placeholder="Enter custom instructions or context for the selected project..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="btn-save-settings" class="btn-primary">Save Changes</button>
+                <button id="btn-save-project-context" class="btn-primary-custom">Save Project Context</button>
             </div>
         </div>
     </div>
 
+    <!-- Code Workspace Modal -->
+    <div id="code-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-code"></i> Code & Artifacts Explorer</h3>
+                <button class="btn-close-modal" data-modal="code-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="code-snippets-list" class="code-snippets-container">
+                    <!-- Dynamic code snippets -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customize Settings Modal -->
+    <div id="customize-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Customize Claude Settings</h3>
+                <button class="btn-close-modal" data-modal="customize-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>System Instructions / User Profile Persona</label>
+                    <textarea id="customize-system-prompt" rows="5" placeholder="Custom instructions for Claude..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Writing Style Preset</label>
+                    <select id="customize-style-select" class="dropdown-select">
+                        <option value="normal">Default Style</option>
+                        <option value="concise">Concise & Direct</option>
+                        <option value="explanatory">Detailed & Explanatory</option>
+                        <option value="formal">Formal & Academic</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tavily Web Search API Key</label>
+                    <input type="password" id="customize-tavily-key" value="••••••••••••••••••••••••••••">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-customize" class="btn-primary-custom">Save Preferences</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
